@@ -1,7 +1,7 @@
 (function ($) {
     $(document).ready(function () {
 
-        var DEBUGMODE = false; // set debug mode
+        var DEBUGMODE = true; // set debug mode
 
 
         /* debug log helper */
@@ -374,6 +374,10 @@
                 var that = this;
                 var urls = this.cacheWarmup.config.getUrlsForType(type);
                 var cachedItemsCount = 0;
+                var requests = {
+                    success: [],
+                    error: []
+                };
 
                 if (urls.length) {
 
@@ -395,40 +399,42 @@
                                         that.cacheWarmup.progressbar.setProgress(that.cacheWarmup.calculator.getProgress());
                                     }
                                 })
-                                .done(function (data) {
-                                    // special: error on success (http status 200)
-                                    // media manager returns 200 even if an image cannot be generated (too big, RAM exceeded)
-                                    // we assume an error if response starts with rex-page-header
-                                    // otherwise page will return blank if stuff works out as expected
-                                    if (data.substr(0, 30) === '<header class="rex-page-header') {
+                                .always(function (data, textStatus, jqXHR) {
+                                    if (typeof data === 'string' && data.substr(0, 30) === '<header class="rex-page-header') {
+                                        // special: error on success (http status 200)
+                                        // media manager returns 200 even if an image cannot be generated (too big, RAM exceeded)
+                                        // we assume an error if response starts with rex-page-header
+                                        // otherwise page will return blank if stuff works out as expected
                                         debug.error('cache: request error for ' + url.slug);
-                                        that.cacheWarmup.isError('RAM exceeded', 'internal', url.absolute);
-                                        throw new Error('RAM exceeded');
+                                        requests.error.push(url.slug);
+                                    }
+                                    else if (textStatus === 'error') {
+                                        debug.error('cache: request error for ' + url.slug);
+                                        requests.error.push(url.slug);
                                     }
                                     else {
-                                        // get debug infos
-                                        timerEnd = new Date().getTime();
-                                        debug.log('cache: request ' + (index + 1) + '/' + urls.length + ' (' + (timerEnd - timerStart) + ' ms) success for ' + url.slug);
-                                        executionTimes.push(timerEnd - timerStart);
+                                        debug.info('cache: request success for ' + url.slug);
+                                        requests.success.push(url.slug);
                                     }
-                                })
-                                .fail(function (jqXHR, textStatus, errorThrown) {
-                                    // throw up error message, statuscode and URL to page where error occured
-                                    that.cacheWarmup.isError(errorThrown, jqXHR.status, url.absolute);
-                                    throw new Error(errorThrown);
+                                    timerEnd = new Date().getTime();
+                                    debug.log('cache: request ' + (index + 1) + '/' + urls.length + ' (' + (timerEnd - timerStart) + ' ms)');
+                                    executionTimes.push(timerEnd - timerStart);
                                 });
                         });
                     }, Promise.resolve()).then(function () {
-                        // finished all requests
-                        debug.info('cache: finished all ' + urls.length + ' requests (' + that._calculateAverageExecutionTime(executionTimes) + ' ms average).');
-                        callback();
+                        debug.info('cache: finished all ' + urls.length + ' requests without errors (' + that._calculateAverageExecutionTime(executionTimes) + ' ms average).');
+                        callback(requests);
+                    }, function() {
+                        debug.info('cache: finished all ' + urls.length + ' requests (' + that._calculateAverageExecutionTime(executionTimes) + ' ms average), but with errors!');
+                        callback(requests);
                     });
-
                 }
                 else {
                     debug.error('cache: no items for type ' + type);
-                    callback();
+                    callback(requests);
                 }
+
+                return requests;
             },
 
             _calculateAverageExecutionTime: function (items) {
@@ -503,17 +509,27 @@
                 this.content.injectTemplate('title', 'title_pages');
                 this.content.injectTemplate('task', 'progress_pages');
                 this.content.setToValue(this.config.getNumOfItems('pages'));
+
+                var results = {
+                    success: [],
+                    error: []
+                };
                 // callback hell starts here:
-                that.cache.generate('pages', function () {
+                that.cache.generate('pages', function (result) {
+                    results.success = results.success.concat(result.success);
+                    results.error = results.error.concat(result.error);
 
                     // prepare and progress images
                     that.content.injectTemplate('title', 'title_images');
                     that.content.injectTemplate('task', 'progress_images');
                     that.content.setToValue(that.config.getNumOfItems('images'));
-                    that.cache.generate('images', function () {
-
+                    that.cache.generate('images', function (result) {
+                        results.success = results.success.concat(result.success);
+                        results.error = results.error.concat(result.error);
+    
                         that.stopwatch.pause();
                         debug.info('cache: finished with all items.');
+                        debug.info(results);
                         that.isFinished();
                     });
                 });
