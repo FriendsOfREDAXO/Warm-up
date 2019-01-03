@@ -26,6 +26,9 @@ pages:
             start: { title: translate:page_start }
             readme: { title: translate:page_readme, subPath: README.md }
 
+console_commands:
+    cache:warmup: rex_cache_warmup_command
+
 requires:
     redaxo: '^5.2'
     php: '>=5.5'
