@@ -9,12 +9,11 @@ abstract class cache_warmup_selector
     /**
      * Prepare all cache items.
      *
-     * @param bool $chunk       Split items into chunks
      * @param bool $useImageIds Use IDs for ref instead of names
      *
      * @return array
      */
-    public static function prepareCacheItems($chunk = false, $useImageIds = false)
+    public static function prepareCacheItems($useImageIds = false)
     {
         $pages = self::getPagesArray();
         $images = self::getImagesArray();
@@ -22,12 +21,6 @@ abstract class cache_warmup_selector
         // change image names to IDs
         if ($useImageIds) {
             $images['items'] = self::getImageIds($images['items']);
-        }
-
-        // chunk items
-        if ($chunk) {
-            $pages['items'] = self::chunk($pages['items'], rex_addon::get('cache_warmup')->getConfig('chunkSizePages'));
-            $images['items'] = self::chunk($images['items'], rex_addon::get('cache_warmup')->getConfig('chunkSizeImages'));
         }
 
         return [
@@ -353,17 +346,5 @@ abstract class cache_warmup_selector
         $items = rex_extension::registerPoint(new rex_extension_point('CACHE_WARMUP_PAGES_WITH_CLANGS', $items));
 
         return ['count' => count($items), 'items' => $items];
-    }
-
-    /**
-     * Split an array into chunks.
-     *
-     * @param int $chunkSize
-     *
-     * @return array
-     */
-    private static function chunk(array $items, $chunkSize)
-    {
-        return array_chunk($items, $chunkSize);
     }
 }
